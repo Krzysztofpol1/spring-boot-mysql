@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-boot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spring-boot
+  template:
+    metadata:
+      labels:
+        app: spring-boot
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-status: 'update'
+        vault.hashicorp.com/role: "spring-boot-app-role"
+        vault.hashicorp.com/agent-inject-secret-database-config: "spring-app/data/mysql/config"
+        vault.hashicorp.com/tls-skip-verify: 'true'
+        # Environment variable export template
+        vault.hashicorp.com/agent-inject-template-database-config: |
+          {{ with secret "spring-app/data/mysql/config" -}}
+          export MYSQL_USER="{{ .Data.MYSQL_USER }}"
+          export MYSQL_PASS="{{ .Data.MYSQL_PASS }}"
+          {{- end }}
+    spec:
+      serviceAccountName: vault-auth
+      containers:
+        - name: app
+          image: krzysztofpol/spring-boot-appl:tomcat_no_ldap_ip
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MYSQL_URL
+              value: jdbc:mysql://192.168.0.133:3306/seconddb
+          imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spring-boot
+spec:
+  selector:
+    app: spring-boot
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: LoadBalancer
